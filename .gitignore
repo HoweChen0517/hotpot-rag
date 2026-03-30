@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Experiment artifacts
+.cache/
+outputs/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data
+hotpot_qa/
+
+# System files
+.DS_Store
+*.nbconvert.ipynb
+.vscode/
+.idea/
