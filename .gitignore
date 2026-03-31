@@ -26,3 +26,6 @@ hotpot_qa/
 
 # api keys
 api_keys.json
+
+# Artifacts
+artifacts/
