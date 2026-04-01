@@ -1,10 +1,11 @@
-from hotpot_rag.evaluation import evaluate_predictions
+from rag_arena.evaluation import evaluate_predictions
 
 
 def test_evaluate_predictions_outputs_expected_columns():
     df = evaluate_predictions(
         [
             {
+                "dataset_name": "hotpotqa",
                 "sample_id": "1",
                 "gold_answer": "Paris",
                 "predicted_answer": "Paris",

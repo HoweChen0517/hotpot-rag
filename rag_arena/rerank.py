@@ -23,9 +23,15 @@ class CrossEncoderReranker:
             return []
         pairs = [[query, document.page_content] for document in documents]
         scores = self.model.predict(pairs)
-        ranked = sorted(zip(documents, scores, strict=True), key=lambda item: float(item[1]), reverse=True)
+        ranked = sorted(
+            zip(documents, scores, strict=True),
+            key=lambda item: float(item[1]),
+            reverse=True,
+        )
         return [(document, float(score)) for document, score in ranked[:top_k]]
 
 
-def build_reranker(model_name: str) -> CrossEncoderReranker:
-    return CrossEncoderReranker(model_name=model_name)
+def build_reranker(rerank_config: dict | None):
+    if not rerank_config or not rerank_config.get("enabled", False):
+        return None
+    return CrossEncoderReranker(model_name=rerank_config["model_name"])

@@ -1,4 +1,4 @@
-from hotpot_rag.cli import main
+from rag_arena.cli import main
 
 
 if __name__ == "__main__":

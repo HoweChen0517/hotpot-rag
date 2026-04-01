@@ -17,6 +17,7 @@ outputs/
 
 # Data
 hotpot_qa/
+2WikiMultihopQA/
 
 # System files
 .DS_Store

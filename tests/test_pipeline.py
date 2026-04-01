@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 
-from hotpot_rag.data import HotpotSample
-from hotpot_rag.pipeline import run_rag_case
+from rag_arena.data import ArenaSample
+from rag_arena.pipeline import run_rag_case
 
 
 class DummyRetriever:
@@ -13,7 +13,7 @@ class DummyRetriever:
             (
                 Document(
                     page_content="France\n\nParis is the capital city of France.",
-                    metadata={"title": "France", "sentences": ["Paris is the capital city of France."]},
+                    metadata={"doc_id": "1:France", "title": "France", "sentences": ["Paris is the capital city of France."]},
                 ),
                 1.0,
             )
@@ -34,7 +34,8 @@ class DummyLLM:
 
 
 def test_run_rag_case_returns_structured_output():
-    sample = HotpotSample(
+    sample = ArenaSample(
+        dataset_name="hotpotqa",
         sample_id="1",
         question="What is the capital of France?",
         answer="Paris",
@@ -48,9 +49,9 @@ def test_run_rag_case_returns_structured_output():
         DummyRetriever(),
         DummyLLM(),
         reranker=DummyReranker(),
-        retrieval_method="bm25",
-        embedding_model="mini",
-        used_model="dummy/model",
+        retriever_config={"method": "bm25", "top_k": 10, "embedding_model": "mini"},
+        rerank_config={"enabled": True, "top_k": 5},
+        generation_config={"provider": "dummy", "model_name": "model"},
     )
     assert result["predicted_answer"] == "Paris"
     assert result["retrieved_titles"] == ["France"]

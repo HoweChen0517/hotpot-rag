@@ -75,6 +75,7 @@ def evaluate_predictions(predictions: list[dict]) -> pd.DataFrame:
         sentence_precision, sentence_recall, sentence_f1 = _supporting_sentence_metrics(prediction)
         rows.append(
             {
+                "dataset_name": prediction.get("dataset_name"),
                 "sample_id": prediction["sample_id"],
                 "exact_match": exact_match_score(prediction["predicted_answer"], prediction["gold_answer"]),
                 "answer_f1": f1_score(prediction["predicted_answer"], prediction["gold_answer"]),

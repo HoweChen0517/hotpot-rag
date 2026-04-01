@@ -1,9 +1,9 @@
+import json
 import sys
 import types
-import json
 
-import hotpot_rag.llm as llm_module
-from hotpot_rag.llm import build_llm
+import rag_arena.llm as llm_module
+from rag_arena.llm import build_llm
 
 
 def test_build_ollama_llm(monkeypatch):

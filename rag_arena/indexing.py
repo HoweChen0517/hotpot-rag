@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from langchain_core.documents import Document
 
-from hotpot_rag.data import HotpotSample
+from rag_arena.data import ArenaSample
 
 
-def build_corpus(samples: list[HotpotSample]) -> list[Document]:
+def build_corpus(samples: list[ArenaSample]) -> list[Document]:
     documents: list[Document] = []
     for sample in samples:
         for document in sample.documents:

@@ -1,12 +1,13 @@
 [project]
-name = "ai6130-groupproject"
+name = "rag-arena"
 version = "0.1.0"
-description = "HotpotQA RAG experimentation framework built with LangChain"
+description = "Multi-dataset RAG experimentation arena built with LangChain"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "datasets>=4.8.4",
     "faiss-cpu>=1.8.0",
+    "iniconfig>=2.3.0",
     "ipykernel>=7.2.0",
     "langchain>=1.2.13",
     "langchain-community>=0.4.1",
@@ -16,6 +17,8 @@ dependencies = [
     "langchain-openrouter>=0.2.1",
     "numpy>=2.2.0",
     "pandas>=2.2.3",
+    "pluggy>=1.6.0",
+    "pytest>=9.0.2",
     "rank-bm25>=0.2.2",
     "sentence-transformers>=3.4.1",
 ]
@@ -26,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-hotpot-rag = "hotpot_rag.cli:main"
+rag-arena = "rag_arena.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -36,7 +39,7 @@ build-backend = "hatchling.build"
 package = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["hotpot_rag"]
+packages = ["rag_arena"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

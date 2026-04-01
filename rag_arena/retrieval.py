@@ -10,8 +10,8 @@ from typing import Protocol
 import faiss
 import numpy as np
 from langchain_core.documents import Document
-from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
+from sentence_transformers import SentenceTransformer
 
 
 TOKEN_PATTERN = re.compile(r"\w+")
@@ -30,6 +30,42 @@ def _normalize_scores(scores: dict[str, float]) -> dict[str, float]:
     if np.isclose(minimum, maximum):
         return {key: 1.0 for key in scores}
     return {key: (value - minimum) / (maximum - minimum) for key, value in scores.items()}
+
+
+def _merge_scored_results(
+    existing: dict[str, tuple[Document, float]],
+    new_results: list[tuple[Document, float]],
+) -> dict[str, tuple[Document, float]]:
+    for document, score in new_results:
+        doc_id = document.metadata["doc_id"]
+        if doc_id not in existing or score > existing[doc_id][1]:
+            existing[doc_id] = (document, float(score))
+    return existing
+
+
+def _context_similarity(
+    previous_documents: list[Document],
+    current_documents: list[Document],
+) -> float:
+    previous_ids = {document.metadata["doc_id"] for document in previous_documents}
+    current_ids = {document.metadata["doc_id"] for document in current_documents}
+    if not previous_ids and not current_ids:
+        return 1.0
+    union = previous_ids | current_ids
+    if not union:
+        return 0.0
+    return len(previous_ids & current_ids) / len(union)
+
+
+def _expand_query(question: str, documents: list[Document]) -> str:
+    evidence_lines = []
+    for document in documents:
+        title = document.metadata.get("title", "")
+        sentences = document.metadata.get("sentences") or []
+        first_sentence = sentences[0] if sentences else document.page_content
+        evidence_lines.append(f"{title}: {first_sentence}")
+    evidence = "\n".join(evidence_lines)
+    return f"{question}\n\nRetrieved evidence:\n{evidence}" if evidence else question
 
 
 class RetrieverLike(Protocol):
@@ -78,7 +114,10 @@ class DenseRetriever:
         self.index, self.embedding_matrix = self._load_or_build_index()
 
     def _cache_key(self) -> str:
-        joined_ids = "|".join(document.metadata.get("doc_id", str(idx)) for idx, document in enumerate(self.documents))
+        joined_ids = "|".join(
+            document.metadata.get("doc_id", str(idx))
+            for idx, document in enumerate(self.documents)
+        )
         digest = md5(f"{self.embedding_model}:{joined_ids}".encode("utf-8")).hexdigest()
         return digest
 
@@ -144,21 +183,14 @@ class HybridRetriever:
         bm25_results = self.bm25_retriever.retrieve_with_scores(query=query, top_k=max(k, self.top_k))
         dense_results = self.dense_retriever.retrieve_with_scores(query=query, top_k=max(k, self.top_k))
 
-        bm25_scores = {
-            doc.metadata["doc_id"]: score for doc, score in bm25_results
-        }
-        dense_scores = {
-            doc.metadata["doc_id"]: score for doc, score in dense_results
-        }
+        bm25_scores = {doc.metadata["doc_id"]: score for doc, score in bm25_results}
+        dense_scores = {doc.metadata["doc_id"]: score for doc, score in dense_results}
         normalized_bm25 = _normalize_scores(bm25_scores)
         normalized_dense = _normalize_scores(dense_scores)
 
-        doc_lookup = {
-            doc.metadata["doc_id"]: doc
-            for doc, _ in bm25_results + dense_results
-        }
+        doc_lookup = {doc.metadata["doc_id"]: doc for doc, _ in bm25_results + dense_results}
         combined_scores: dict[str, float] = {}
-        for doc_id, document in doc_lookup.items():
+        for doc_id in doc_lookup:
             bm25_score = normalized_bm25.get(doc_id, 0.0)
             dense_score = normalized_dense.get(doc_id, 0.0)
             combined_scores[doc_id] = self.alpha * bm25_score + (1.0 - self.alpha) * dense_score
@@ -170,8 +202,43 @@ class HybridRetriever:
         return [doc for doc, _ in self.retrieve_with_scores(query=query, top_k=top_k)]
 
 
-# TODO: More Retriever/Strategy to build
+@dataclass
+class IterativeRetriever:
+    base_retriever: RetrieverLike
+    top_k: int = 10
+    max_iter: int = 3
+    sim_threshold: float = 0.85
 
+    def retrieve_with_scores(
+        self, query: str, top_k: int | None = None
+    ) -> list[tuple[Document, float]]:
+        k = top_k or self.top_k
+        aggregated_results: dict[str, tuple[Document, float]] = {}
+        previous_documents: list[Document] = []
+        current_query = query
+
+        for iteration in range(self.max_iter):
+            current_results = self.base_retriever.retrieve_with_scores(current_query, top_k=k)
+            current_documents = [document for document, _ in current_results]
+            aggregated_results = _merge_scored_results(aggregated_results, current_results)
+
+            if iteration > 0:
+                similarity = _context_similarity(previous_documents, current_documents)
+                if similarity >= self.sim_threshold:
+                    break
+
+            previous_documents = current_documents
+            current_query = _expand_query(query, current_documents)
+
+        ranked_results = sorted(
+            aggregated_results.values(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        return ranked_results[:k]
+
+    def retrieve(self, query: str, top_k: int | None = None) -> list[Document]:
+        return [doc for doc, _ in self.retrieve_with_scores(query=query, top_k=top_k)]
 
 
 def build_bm25_retriever(documents: list[Document], top_k: int = 10) -> BM25Retriever:
@@ -204,3 +271,56 @@ def build_hybrid_retriever(
         alpha=alpha,
         top_k=top_k,
     )
+
+
+def build_iterative_retriever(
+    base_retriever: RetrieverLike,
+    top_k: int = 10,
+    max_iter: int = 3,
+    sim_threshold: float = 0.85,
+) -> IterativeRetriever:
+    return IterativeRetriever(
+        base_retriever=base_retriever,
+        top_k=top_k,
+        max_iter=max_iter,
+        sim_threshold=sim_threshold,
+    )
+
+
+def build_retriever(documents: list[Document], retriever_config: dict) -> RetrieverLike:
+    config = dict(retriever_config)
+    method = config.get("method", "bm25")
+    top_k = int(config.get("top_k", 10))
+    cache_dir = config.get("cache_dir", ".cache/faiss")
+
+    bm25 = build_bm25_retriever(documents, top_k=top_k)
+    if method == "bm25":
+        return bm25
+
+    dense = build_faiss_retriever(
+        documents,
+        embedding_model=config["embedding_model"],
+        top_k=top_k,
+        cache_dir=cache_dir,
+    )
+    if method == "dense":
+        return dense
+    if method == "hybrid":
+        return build_hybrid_retriever(
+            bm25,
+            dense,
+            alpha=float(config.get("alpha", 0.5)),
+            top_k=top_k,
+        )
+    if method == "iterative":
+        base_method = config.get("base_method", "hybrid")
+        base_config = dict(config)
+        base_config["method"] = base_method
+        base_retriever = build_retriever(documents, base_config)
+        return build_iterative_retriever(
+            base_retriever=base_retriever,
+            top_k=top_k,
+            max_iter=int(config.get("max_iter", 3)),
+            sim_threshold=float(config.get("sim_threshold", 0.85)),
+        )
+    raise ValueError(f"Unsupported retrieval method: {method}")

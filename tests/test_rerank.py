@@ -1,7 +1,7 @@
 from langchain_core.documents import Document
 
-import hotpot_rag.rerank as rerank_module
-from hotpot_rag.rerank import build_reranker
+import rag_arena.rerank as rerank_module
+from rag_arena.rerank import build_reranker
 
 
 class FakeCrossEncoder:
@@ -20,7 +20,7 @@ class FakeCrossEncoder:
 
 def test_reranker_reorders_documents(monkeypatch):
     monkeypatch.setattr(rerank_module, "CrossEncoder", FakeCrossEncoder)
-    reranker = build_reranker("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    reranker = build_reranker({"enabled": True, "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"})
     docs = [
         Document(page_content="Berlin is in Germany.", metadata={"title": "Germany"}),
         Document(page_content="Paris is in France.", metadata={"title": "France"}),

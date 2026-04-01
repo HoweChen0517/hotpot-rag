@@ -2,11 +2,12 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-import hotpot_rag.retrieval as retrieval_module
-from hotpot_rag.retrieval import (
+import rag_arena.retrieval as retrieval_module
+from rag_arena.retrieval import (
     build_bm25_retriever,
     build_faiss_retriever,
     build_hybrid_retriever,
+    build_retriever,
 )
 
 
@@ -86,3 +87,22 @@ def test_hybrid_retriever_deduplicates_and_scores(monkeypatch):
     results = hybrid.retrieve_with_scores("capital of Spain", top_k=2)
     assert len(results) == 2
     assert len({doc.metadata["doc_id"] for doc, _ in results}) == 2
+
+
+def test_iterative_retriever_builds_from_config(monkeypatch):
+    monkeypatch.setattr(retrieval_module, "SentenceTransformer", FakeSentenceTransformer)
+    retriever = build_retriever(
+        _sample_documents(),
+        {
+            "method": "iterative",
+            "base_method": "hybrid",
+            "top_k": 2,
+            "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+            "cache_dir": Path(".cache/test-faiss"),
+            "max_iter": 3,
+            "sim_threshold": 0.5,
+        },
+    )
+    results = retriever.retrieve_with_scores("capital of France", top_k=2)
+    assert results
+    assert len(results) <= 2

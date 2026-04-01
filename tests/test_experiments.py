@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hotpot_rag.experiments import ExperimentConfig, run_experiment
+from rag_arena.experiments import ExperimentConfig, run_experiment
 
 
 def test_run_experiment_writes_outputs(monkeypatch, tmp_path: Path):
@@ -10,9 +10,10 @@ def test_run_experiment_writes_outputs(monkeypatch, tmp_path: Path):
 
             return AIMessage(content="Paris")
 
-    monkeypatch.setattr("hotpot_rag.experiments.build_llm", lambda **kwargs: DummyLLM())
-    monkeypatch.setattr("hotpot_rag.experiments.load_hotpotqa_split", lambda **kwargs: [
-        __import__("hotpot_rag.data", fromlist=["HotpotSample"]).HotpotSample(
+    monkeypatch.setattr("rag_arena.experiments.build_llm", lambda **kwargs: DummyLLM())
+    monkeypatch.setattr("rag_arena.experiments.load_qa_split", lambda **kwargs: [
+        __import__("rag_arena.data", fromlist=["ArenaSample"]).ArenaSample(
+            dataset_name="hotpotqa",
             sample_id="1",
             question="What is the capital of France?",
             answer="Paris",
@@ -20,12 +21,12 @@ def test_run_experiment_writes_outputs(monkeypatch, tmp_path: Path):
             level="easy",
             supporting_facts=[{"title": "France", "sent_id": 0}],
             documents=[
-                __import__("hotpot_rag.data", fromlist=["HotpotDocumentRecord"]).HotpotDocumentRecord(
+                __import__("rag_arena.data", fromlist=["ArenaDocumentRecord"]).ArenaDocumentRecord(
                     doc_id="1:France",
                     title="France",
                     text="France\n\nParis is the capital city of France.",
                     sentences=["Paris is the capital city of France."],
-                    metadata={"sample_id": "1", "title": "France", "is_supporting_doc": True},
+                    metadata={"dataset_name": "hotpotqa", "sample_id": "1", "title": "France", "is_supporting_doc": True},
                 )
             ],
         )
@@ -34,8 +35,9 @@ def test_run_experiment_writes_outputs(monkeypatch, tmp_path: Path):
     result = run_experiment(
         ExperimentConfig(
             sample_size=1,
-            retrieval_method="bm25",
             output_dir=str(tmp_path),
+            retriever_config={"method": "bm25", "top_k": 5},
+            generation_config={"provider": "ollama", "model_name": "dummy"},
         )
     )
     assert result.summary["exact_match"] == 1.0

@@ -7,7 +7,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
-from hotpot_rag.data import HotpotSample
+from rag_arena.data import ArenaSample
 
 
 ANSWER_PROMPT = ChatPromptTemplate.from_messages(
@@ -34,18 +34,40 @@ def _format_context(documents: list[Document]) -> str:
     return "\n\n".join(chunks)
 
 
+def _extract_response_text(raw_response: Any) -> str:
+    if isinstance(raw_response, BaseMessage):
+        content = raw_response.content
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and "text" in item:
+                    parts.append(str(item["text"]))
+            return "\n".join(part for part in parts if part).strip()
+        return str(content).strip()
+    return str(raw_response).strip()
+
+
 def run_rag_case(
-    sample: HotpotSample,
+    sample: ArenaSample,
     retriever: Any,
     llm: Any,
     reranker: Any | None = None,
     *,
-    top_k_retrieve: int = 10,
-    top_k_after_rerank: int = 5,
-    retrieval_method: str = "unknown",
-    embedding_model: str | None = None,
-    used_model: str | None = None,
+    retriever_config: dict | None = None,
+    rerank_config: dict | None = None,
+    generation_config: dict | None = None,
 ) -> dict:
+    retriever_config = retriever_config or {}
+    rerank_config = rerank_config or {}
+    generation_config = generation_config or {}
+
+    top_k_retrieve = int(retriever_config.get("top_k", 10))
+    top_k_after_rerank = int(rerank_config.get("top_k", 5))
+
     retrieved_with_scores = retriever.retrieve_with_scores(sample.question, top_k=top_k_retrieve)
     retrieved_docs = [document for document, _ in retrieved_with_scores]
 
@@ -63,19 +85,10 @@ def run_rag_case(
     else:
         raw_response = llm.invoke(prompt_value.to_messages())
 
-    # print(f"Question: {sample.question}")
-    # print(f"Gold Answer: {sample.answer}")
-    # print(f"Retrieved {len(retrieved_docs)} documents, reranked to {len(final_docs)} documents.")
-
-    if isinstance(raw_response, BaseMessage):
-        predicted_answer = str(raw_response.content).strip()
-    else:
-        predicted_answer = str(raw_response).strip()
-
-    # print(f"Raw LLM Response: {raw_response}")
-    # print(f"Predicted Answer: {predicted_answer}")
+    predicted_answer = _extract_response_text(raw_response)
 
     return {
+        "dataset_name": sample.dataset_name,
         "sample_id": sample.sample_id,
         "question": sample.question,
         "gold_answer": sample.answer,
@@ -84,8 +97,8 @@ def run_rag_case(
         "retrieved_contexts": [document.page_content for document in final_docs],
         "retrieved_sentences": [document.metadata.get("sentences", []) for document in final_docs],
         "supporting_facts": sample.supporting_facts,
-        "used_model": used_model,
-        "retrieval_method": retrieval_method,
-        "embedding_model": embedding_model,
+        "used_model": f"{generation_config.get('provider', 'unknown')}/{generation_config.get('model_name', 'unknown')}",
+        "retrieval_method": retriever_config.get("method"),
+        "embedding_model": retriever_config.get("embedding_model"),
         "rerank_enabled": reranker is not None,
     }
