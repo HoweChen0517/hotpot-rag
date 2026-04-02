@@ -5,12 +5,13 @@ import json
 from pathlib import Path
 
 from rag_arena.data import ArenaSample, load_qa_split
-from rag_arena.evaluation import evaluate_predictions
+from rag_arena.evaluation import evaluate_predictions, exact_match_score
 from rag_arena.indexing import build_corpus
 from rag_arena.llm import build_llm
 from rag_arena.pipeline import run_rag_case
 from rag_arena.rerank import build_reranker
 from rag_arena.retrieval import build_retriever
+from tqdm.auto import tqdm
 
 
 DEFAULT_EMBEDDING_MODELS = [
@@ -88,6 +89,14 @@ def _build_retriever(samples: list[ArenaSample], config: ExperimentConfig):
     return build_retriever(documents, retriever_config)
 
 
+def _is_retrieval_correct(prediction: dict) -> bool:
+    gold_titles = {item["title"] for item in prediction["supporting_facts"]}
+    predicted_titles = set(prediction.get("retrieved_titles", []))
+    if not gold_titles:
+        return True
+    return gold_titles.issubset(predicted_titles)
+
+
 def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -108,8 +117,18 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     reranker = build_reranker(rerank_config)
     llm = build_llm(**generation_config)
 
-    predictions = [
-        run_rag_case(
+    predictions = []
+    retrieval_correct_count = 0
+    exact_match_count = 0
+
+    progress = tqdm(
+        samples,
+        desc=f"Running {config.dataset_name}",
+        unit="sample",
+        dynamic_ncols=True,
+    )
+    for sample in progress:
+        prediction = run_rag_case(
             sample,
             retriever,
             llm,
@@ -118,13 +137,24 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
             rerank_config=rerank_config,
             generation_config=generation_config,
         )
-        for sample in samples
-    ]
+        predictions.append(prediction)
+
+        if _is_retrieval_correct(prediction):
+            retrieval_correct_count += 1
+        if exact_match_score(prediction["predicted_answer"], prediction["gold_answer"]) == 1.0:
+            exact_match_count += 1
+
+        progress.set_postfix(
+            retrieval_correct=f"{retrieval_correct_count}/{len(predictions)}",
+            exact_match=f"{exact_match_count}/{len(predictions)}",
+        )
 
     metrics_df = evaluate_predictions(predictions)
     summary = {
         "dataset_name": config.dataset_name,
         "num_samples": len(metrics_df),
+        "retrieval_correct_count": retrieval_correct_count,
+        "exact_match_count": exact_match_count,
         "exact_match": float(metrics_df["exact_match"].mean()),
         "answer_f1": float(metrics_df["answer_f1"].mean()),
         "retrieval_recall_at_k": float(metrics_df["retrieval_recall_at_k"].mean()),
