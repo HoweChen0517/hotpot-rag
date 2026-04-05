@@ -157,9 +157,11 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
         "exact_match_count": exact_match_count,
         "exact_match": float(metrics_df["exact_match"].mean()),
         "answer_f1": float(metrics_df["answer_f1"].mean()),
-        "retrieval_recall_at_k": float(metrics_df["retrieval_recall_at_k"].mean()),
-        "supporting_title_f1": float(metrics_df["supporting_title_f1"].mean()),
-        "supporting_sentence_f1": float(metrics_df["supporting_sentence_f1"].mean()),
+        f"retrieval_recall@{rerank_config.get('top_k', 5) if rerank_config.get('enabled', False) else retriever_config.get('top_k', 5)}": float(metrics_df["supporting_title_recall@k"].mean()),
+        f"retrieval_mrr@{rerank_config.get('top_k', 5) if rerank_config.get('enabled', False) else retriever_config.get('top_k', 5)}": float(metrics_df["supporting_title_mrr@k"].mean()),
+        # "supporting_title_precision": float(metrics_df["supporting_title_precision@k"].mean()),
+        # "supporting_title_recall": float(metrics_df["supporting_title_recall@k"].mean()),
+        # "supporting_title_f1": float(metrics_df["supporting_title_f1@k"].mean()),
     }
 
     predictions_path = output_dir / "predictions.jsonl"

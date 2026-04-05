@@ -21,4 +21,5 @@ def test_evaluate_predictions_outputs_expected_columns():
     )
     assert df.loc[0, "exact_match"] == 1.0
     assert df.loc[0, "answer_f1"] == 1.0
+    assert df.loc[0, "retrieval_mrr"] == 1.0
     assert df.loc[0, "supporting_title_recall"] == 1.0

@@ -49,6 +49,16 @@ def _supporting_title_metrics(prediction: dict) -> tuple[float, float, float]:
     return precision, recall, f1
 
 
+def _supporting_title_mrr(prediction: dict) -> float:
+    gold_titles = {item["title"] for item in prediction["supporting_facts"]}
+    if not gold_titles:
+        return 1.0
+    for rank, title in enumerate(prediction.get("retrieved_titles", []), start=1):
+        if title in gold_titles:
+            return 1.0 / rank
+    return 0.0
+
+
 def _supporting_sentence_metrics(prediction: dict) -> tuple[float, float, float]:
     gold_pairs = {(item["title"], item["sent_id"]) for item in prediction["supporting_facts"]}
     predicted_pairs: set[tuple[str, int]] = set()
@@ -72,6 +82,7 @@ def evaluate_predictions(predictions: list[dict]) -> pd.DataFrame:
     rows = []
     for prediction in predictions:
         title_precision, title_recall, title_f1 = _supporting_title_metrics(prediction)
+        title_mrr = _supporting_title_mrr(prediction)
         sentence_precision, sentence_recall, sentence_f1 = _supporting_sentence_metrics(prediction)
         rows.append(
             {
@@ -79,13 +90,14 @@ def evaluate_predictions(predictions: list[dict]) -> pd.DataFrame:
                 "sample_id": prediction["sample_id"],
                 "exact_match": exact_match_score(prediction["predicted_answer"], prediction["gold_answer"]),
                 "answer_f1": f1_score(prediction["predicted_answer"], prediction["gold_answer"]),
-                "retrieval_recall_at_k": title_recall,
-                "supporting_title_precision": title_precision,
-                "supporting_title_recall": title_recall,
-                "supporting_title_f1": title_f1,
-                "supporting_sentence_precision": sentence_precision,
-                "supporting_sentence_recall": sentence_recall,
-                "supporting_sentence_f1": sentence_f1,
+                # "retrieval_recall@k": title_recall,
+                "supporting_title_mrr@k": title_mrr,
+                "supporting_title_precision@k": title_precision,
+                "supporting_title_recall@k": title_recall,
+                "supporting_title_f1@k": title_f1,
+                "supporting_sentence_precision@k": sentence_precision,
+                "supporting_sentence_recall@k": sentence_recall,
+                "supporting_sentence_f1@k": sentence_f1,
                 "retrieval_method": prediction.get("retrieval_method"),
                 "embedding_model": prediction.get("embedding_model"),
                 "used_model": prediction.get("used_model"),
